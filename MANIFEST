@@ -1,0 +1,10 @@
+Changes
+lib/RPC/Pipelined.pm
+lib/RPC/Pipelined/Client.pm
+lib/RPC/Pipelined/Logger.pm
+lib/RPC/Pipelined/Promise.pm
+lib/RPC/Pipelined/Server.pm
+Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+t/basic.t
