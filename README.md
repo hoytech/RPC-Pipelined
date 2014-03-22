@@ -1,0 +1,4 @@
+RPC-Pipelined
+=============
+
+Promise pipelining
