@@ -15,6 +15,26 @@ sub new {
   my $self = \%args;
   bless $self, $class;
 
+  $self->{interface} ||= sub {
+    my $package_name = shift;
+
+    if (defined $package_name) {
+      my $method_name = shift;
+
+      return $package_name->$method_name(@_);
+    } else {
+      my $sub_name = shift;
+
+      if ($sub_name !~ /:/) {
+        my ($caller_package, $f, $z) = caller(2);
+        $sub_name = "${caller_package}::$sub_name";
+      }
+
+      my $sub_ref = \&$sub_name;
+      return $sub_ref->(@_);
+    }
+  };
+
   $self->{promises} = {};
   $self->{next_promise_id} = 0;
 
