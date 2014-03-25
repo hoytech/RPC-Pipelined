@@ -40,7 +40,7 @@ sub run {
   return;
 }
 
-sub pack_msg {
+sub prepare {
   my ($self) = @_;
 
   my $calls = $self->{calls_building};
@@ -48,10 +48,10 @@ sub pack_msg {
 
   push @{ $self->{calls_in_flight} }, $calls;
 
-  return Sereal::Encoder::encode_sereal({ cmd => 'do', calls => $calls, });
+  return RPC::Pipelined::Client::Message->new({ cmd => 'do', calls => $calls, });
 }
 
-sub unpack_response {
+sub unpack {
   my ($self, $encoded_response) = @_;
 
   my $msg = Sereal::Decoder::decode_sereal($encoded_response);
@@ -69,10 +69,36 @@ sub unpack_response {
   return $msg;
 }
 
-sub pack_terminate_msg {
+sub terminate {
   my ($self) = @_;
 
-  return Sereal::Encoder::encode_sereal({ cmd => 'dn', });
+  return RPC::Pipelined::Client::Message->new({ cmd => 'dn', });
 }
+
+
+
+package RPC::Pipelined::Client::Message;
+
+use strict;
+
+use Sereal::Encoder;
+
+
+sub new {
+  my ($class, $data) = @_;
+
+  my $self = { data => $data, };
+  bless $self, $class;
+
+  return $self;
+}
+
+
+sub pack {
+  my ($self) = @_;
+
+  return Sereal::Encoder::encode_sereal($self->{data});
+}
+
 
 1;
