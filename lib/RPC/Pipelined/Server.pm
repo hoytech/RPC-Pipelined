@@ -74,7 +74,11 @@ sub exec {
           if (ref $_ eq 'RPC::Pipelined::Promise') {
             my $rmap_state = shift;
             delete $rmap_state->{seen}->{0 + $_};
-            $_ = $_->{result};
+            if (exists $_->{result}) {
+              $_ = $_->{result};
+            } else {
+              $_ = $self->{promises}->{$_->{id}}->{result};
+            }
           }
         } $args;
 
