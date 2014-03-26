@@ -8,3 +8,4 @@ Makefile.PL
 MANIFEST
 MANIFEST.SKIP
 t/basic.t
+t/method.t

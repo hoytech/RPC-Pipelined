@@ -2,6 +2,7 @@ package RPC::Pipelined::Client;
 
 use strict;
 
+use Scalar::Util;
 use Sereal::Encoder;
 use Sereal::Decoder;
 
@@ -28,8 +29,11 @@ sub run {
 
   my $call = { args => \@args, wa => wantarray, };
 
-  $call->{promise} = RPC::Pipelined::Promise->new
-    if defined wantarray;
+  if (defined wantarray) {
+    $call->{promise} = { client => $self, };
+    Scalar::Util::weaken($call->{promise}->{client});
+    bless $call->{promise}, 'RPC::Pipelined::Promise';
+  }
 
   push @{$self->{calls_building}}, $call;
 
@@ -54,13 +58,13 @@ sub prepare {
 sub unpack {
   my ($self, $encoded_response) = @_;
 
-  my $msg = Sereal::Decoder::decode_sereal($encoded_response);
+  my $msg = Sereal::Decoder::decode_sereal($encoded_response, { freeze_callbacks => 1, });
 
   my $calls = shift @{ $self->{calls_in_flight} };
 
   foreach my $call (@$calls) {
     if (exists $call->{promise}) {
-      $call->{promise}->set_id(shift @{ $msg->{promise_ids} });
+      $call->{promise}->_set_id(shift @{ $msg->{promise_ids} });
     }
   }
 
@@ -97,7 +101,7 @@ sub new {
 sub pack {
   my ($self) = @_;
 
-  return Sereal::Encoder::encode_sereal($self->{data});
+  return Sereal::Encoder::encode_sereal($self->{data}, { freeze_callbacks => 1, });
 }
 
 

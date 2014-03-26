@@ -9,6 +9,9 @@ use Data::Rmap qw/rmap_ref/;
 use RPC::Pipelined::Promise;
 
 
+our $default_package = 'main';
+
+
 sub new {
   my ($class, %args) = @_;
 
@@ -26,8 +29,7 @@ sub new {
       my $sub_name = shift;
 
       if ($sub_name !~ /:/) {
-        my ($caller_package, $f, $z) = caller(2);
-        $sub_name = "${caller_package}::$sub_name";
+        $sub_name = "${default_package}::$sub_name";
       }
 
       my $sub_ref = \&$sub_name;
@@ -48,7 +50,7 @@ sub exec {
   local $RPC::Pipelined::Logger::log_defer_object;
   local $RPC::Pipelined::Promise::current_server = $self;
 
-  my $msg = Sereal::Decoder::decode_sereal($msg_encoded);
+  my $msg = Sereal::Decoder::decode_sereal($msg_encoded, { freeze_callbacks => 1, });
 
   my $output = {};
 
@@ -70,6 +72,8 @@ sub exec {
       foreach my $call (@{ $msg->{calls} }) {
         my $args = $call->{args};
 
+        my $invoked_promise = (ref $args->[0] eq 'RPC::Pipelined::Promise');
+
         rmap_ref {
           if (ref $_ eq 'RPC::Pipelined::Promise') {
             my $rmap_state = shift;
@@ -83,7 +87,7 @@ sub exec {
         } $args;
 
         if ($call == $msg->{calls}->[-1]) {
-          $output_val = $self->{interface}->(@$args);
+          $output_val = $self->_invoke_interface($args, $invoked_promise);
         } elsif (defined $call->{wa}) {
           my $promise = $call->{promise};
 
@@ -91,9 +95,9 @@ sub exec {
           $self->{promises}->{$id} = $promise;
           push @{ $output->{promise_ids} }, $id;
 
-          $promise->{result} = $self->{interface}->(@$args);
+          $promise->{result} = $self->_invoke_interface($args, $invoked_promise);
         } else {
-          $self->{interface}->(@$args);
+          $self->_invoke_interface($args, $invoked_promise);
         }
       }
     };
@@ -111,12 +115,12 @@ sub exec {
       $output->{val} = $output_val;
     }
 
-    my $output_sereal = eval { Sereal::Encoder::encode_sereal($output); };
+    my $output_sereal = eval { Sereal::Encoder::encode_sereal($output, { freeze_callbacks => 1, }); };
 
     if ($@) {
       $output->{cmd} = 'er';
       $output->{val} = "error Sereal encoding interface output: $@";
-      $output_sereal = Sereal::Encoder::encode_sereal($output);
+      $output_sereal = Sereal::Encoder::encode_sereal($output, { freeze_callbacks => 1, });
     }
 
     return $output_sereal;
@@ -128,6 +132,38 @@ sub exec {
   } else {
     die "unknown command: $msg->{cmd}";
   }
+}
+
+
+sub _invoke_interface {
+  my ($self, $args, $invoked_promise) = @_;
+
+  my $cb;
+
+  if ($invoked_promise) {
+    my $obj = shift @$args;
+    my $method = shift @$args;
+
+    if (defined $method) {
+      $cb = sub {
+        $obj->$method(@_);
+      };
+    } else {
+      $cb = sub {
+        $obj->(@_);
+      };
+    }
+  } else {
+    $cb = $self->{interface};
+  }
+
+  if (defined wantarray) {
+    return $cb->(@$args);
+  } else {
+    $cb->(@$args);
+  }
+
+  return;
 }
 
 
